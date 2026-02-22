@@ -9,14 +9,23 @@ El sistema tiene como visión centralizar las operaciones logísticas en una arq
 *   **Administrador (ADMIN):** Posee control total del sistema, incluyendo gestión de usuarios, pagos y generación de reportes.
 
 ## Módulos y Funcionalidades Principales
-1.  **Dashboard Interactivo:** Centro de control que muestra métricas clave como envíos activos, entregas completadas y saldo disponible en la billetera.
-2.  **Gestión de Envíos:** Permite la creación de guías mediante un **formulario de 5 pasos** que incluye cálculo automático de costos (basado en peso real o volumétrico), selección de servicio (Standard vs Express) y generación de un `trackingId` único.
-3.  **Servicios Offshore:** Flujo guiado de **6 pasos** para gestionar importaciones desde China, cubriendo desde la información del producto y link del proveedor (1688/Wiyu) hasta la inspección de calidad (QC) y declaración de aduanas.
-4.  **Almacén Virtual:** Control de inventario antes del envío final. Los usuarios pueden visualizar sus artículos con fotos, pesos y dimensiones, y convertirlos directamente en un envío pre-rellenando los datos.
-5.  **Billetera y Facturación:** Sistema financiero integrado para recargas de saldo y pagos de servicios de forma transaccional, asegurando la consistencia de fondos.
-6.  **Módulo de Logs y Auditoría:** Registra todas las actividades de la plataforma (40+ tipos de acciones) con niveles de visibilidad diferenciados según el rol del usuario para garantizar la transparencia.
+Para detalles técnicos profundos, consulta la [Documentación Técnica de Módulos](./docs/TECHNICAL_DOCUMENTATION.md).
 
-## Infraestructura y Tecnologías Clave
+1.  [**Gestión de Envíos**](./SHIPPING_ENGINE.md): Motor con máquina de estados, tracking y cálculo volumétrico.
+2.  [**Servicios Offshore**](./OFFSHORE_DESIGN.md): Flujo guiado de 6 pasos para importaciones desde China.
+3.  [**Almacén Virtual**](./WAREHOUSE_DESIGN.md): Control de inventario, SKU automático y consolidación.
+4.  [**Billetera Financiera**](./WALLET_DESIGN.md): Ledger contable de partida doble y multi-moneda.
+5.  [**Auditoría Inmutable**](./AUDIT_LOGGING_DESIGN.md): Sistema de logs empresariales con severidad y RBAC.
+
+## Infraestructura y Arquitectura
+Consulta el [Diseño de Arquitectura](./ARCHITECTURE.md) y el [Modelo de Datos](./DATABASE_DESIGN.md).
+
+- **Arquitectura**: Monolito Modular con DDD ([Modelo de Dominio](./DOMAIN_MODEL.md)).
+- **Backend**: Next.js 15 (App Router), Prisma 7, PostgreSQL.
+- **Frontend**: Tailwind CSS 4, ShadCN UI.
+- **API**: Consulta la [Referencia de Endpoints](./docs/API_ENDPOINTS.md).
+
+## Tecnologías Clave
 La plataforma utiliza un stack moderno orientado a la escalabilidad empresarial:
 *   **Frontend Core:** Next.js 15 (App Router) y TypeScript 5.x.
 *   **Interfaz (UI/UX):** ShadCN UI + Tailwind CSS. Colores corporativos: Cinnabar (#DD5F3F), Yale Blue (#09366D), Mikado Yellow (#FFC531).

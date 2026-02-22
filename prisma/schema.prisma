@@ -7,7 +7,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 enum Role {
@@ -25,20 +24,77 @@ enum ShipmentStatus {
   CANCELLED
 }
 
+enum TransactionType {
+  RECHARGE
+  PAYMENT
+  REFUND
+  TRANSFER
+  ADJUSTMENT
+}
+
+enum Currency {
+  USD
+  DOP
+  CNY
+}
+
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  password      String?
-  role          Role      @default(USER)
-  points        Int       @default(0)
-  balance       Decimal   @default(0.00) @db.Decimal(10, 2)
-  shipments     Shipment[]
-  warehouseItems WarehouseItem[]
-  transactions  Transaction[]
-  auditLogs     AuditLog[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id              String         @id @default(cuid())
+  name            String?
+  email           String?        @unique
+  password        String?
+  role            Role           @default(USER)
+  points          Int            @default(0)
+
+  // Financial consistency
+  accounts        Account[]
+
+  shipments       Shipment[]
+  warehouseItems  WarehouseItem[]
+  auditLogs       AuditLog[]
+
+  version         Int            @default(1)
+  deletedAt       DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([email, deletedAt])
+}
+
+model Account {
+  id            String         @id @default(cuid())
+  userId        String
+  user          User           @relation(fields: [userId], references: [id])
+  currency      Currency       @default(USD)
+  balance       Decimal        @default(0.00) @db.Decimal(12, 2)
+
+  ledgerEntries LedgerEntry[]
+
+  version       Int            @default(1)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([userId, currency])
+}
+
+model LedgerEntry {
+  id            String          @id @default(cuid())
+  accountId     String
+  account       Account         @relation(fields: [accountId], references: [id])
+  amount        Decimal         @db.Decimal(12, 2) // Positive for credit, negative for debit
+  balanceAfter  Decimal         @db.Decimal(12, 2)
+  type          TransactionType
+  description   String
+  referenceId   String?         // ID of the related object (Shipment, etc.)
+
+  // Multi-currency metadata
+  originalAmount Decimal?       @db.Decimal(12, 2)
+  originalCurrency Currency?
+  exchangeRate   Decimal?       @db.Decimal(12, 6)
+
+  createdAt     DateTime        @default(now())
+
+  @@index([accountId, createdAt])
 }
 
 model Shipment {
@@ -47,13 +103,21 @@ model Shipment {
   status          ShipmentStatus @default(PENDING)
   userId          String
   user            User           @relation(fields: [userId], references: [id])
+
   weightReal      Float?
   weightVol       Float?
   cost            Decimal?       @db.Decimal(10, 2)
   serviceType     String?        // Standard vs Express
+
   items           WarehouseItem[]
+
+  version         Int            @default(1)
+  deletedAt       DateTime?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
+
+  @@index([userId, status])
+  @@index([trackingId, deletedAt])
 }
 
 model WarehouseItem {
@@ -62,22 +126,17 @@ model WarehouseItem {
   user        User      @relation(fields: [userId], references: [id])
   shipmentId  String?
   shipment    Shipment? @relation(fields: [shipmentId], references: [id])
+
   description String
   photos      String[]  // S3 URLs
   dimensions  Json?     // { l, w, h }
   weight      Float?
+
+  deletedAt   DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-}
 
-model Transaction {
-  id          String   @id @default(cuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id])
-  amount      Decimal  @db.Decimal(10, 2)
-  type        String   // RECHARGE, PAYMENT, REFUND
-  description String
-  createdAt   DateTime @default(now())
+  @@index([userId, createdAt])
 }
 
 model AuditLog {
@@ -85,6 +144,13 @@ model AuditLog {
   userId    String?
   user      User?    @relation(fields: [userId], references: [id])
   action    String
-  metadata  Json?
+  entity    String?  // Name of the table/entity
+  entityId  String?  // ID of the affected record
+  oldValue  Json?    // Snapshot before change
+  newValue  Json?    // Snapshot after change
+  metadata  Json?    // IP, User-Agent, etc.
   timestamp DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([userId, timestamp])
 }

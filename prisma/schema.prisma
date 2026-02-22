@@ -36,6 +36,7 @@ enum TransactionType {
   ADJUSTMENT
   HOLD
   RELEASE
+  STORAGE_PENALTY
 }
 
 enum Currency {
@@ -48,6 +49,19 @@ enum HoldStatus {
   ACTIVE
   EXECUTED
   RELEASED
+}
+
+enum WarehouseStatus {
+  PENDING_RECEIPT
+  RECEIVED
+  CONSOLIDATED
+  SHIPPED
+  DISCARDED
+}
+
+enum ContainerType {
+  LCL
+  FCL
 }
 
 model User {
@@ -78,10 +92,7 @@ model Account {
   user          User           @relation(fields: [userId], references: [id])
   currency      Currency       @default(USD)
 
-  // Ledger-based balance (Total funds)
   balance       Decimal        @default(0.00) @db.Decimal(12, 2)
-
-  // Available funds (Balance - Active Holds)
   availableBalance Decimal     @default(0.00) @db.Decimal(12, 2)
 
   ledgerEntries LedgerEntry[]
@@ -98,7 +109,7 @@ model JournalEntry {
   id              String         @id @default(cuid())
   description     String
   idempotencyKey  String?        @unique
-  referenceId     String?        // External reference (Stripe ID, etc.)
+  referenceId     String?
 
   ledgerEntries   LedgerEntry[]
 
@@ -129,7 +140,7 @@ model Hold {
   reason        String
   status        HoldStatus     @default(ACTIVE)
 
-  referenceId   String?        // ID of the related object (OffshoreOrder, etc.)
+  referenceId   String?
   expiresAt     DateTime?
 
   createdAt     DateTime       @default(now())
@@ -156,6 +167,9 @@ model Shipment {
   items           WarehouseItem[]
   trackingHistory TrackingHistory[]
 
+  containerId     String?
+  container       Container?     @relation(fields: [containerId], references: [id])
+
   version         Int            @default(1)
   deletedAt       DateTime?
   createdAt       DateTime       @default(now())
@@ -181,22 +195,59 @@ model TrackingHistory {
 }
 
 model WarehouseItem {
-  id          String    @id @default(cuid())
+  id          String          @id @default(cuid())
+  sku         String?         @unique
+  status      WarehouseStatus @default(PENDING_RECEIPT)
+
   userId      String
-  user        User      @relation(fields: [userId], references: [id])
+  user        User            @relation(fields: [userId], references: [id])
+
   shipmentId  String?
-  shipment    Shipment? @relation(fields: [shipmentId], references: [id])
+  shipment    Shipment?       @relation(fields: [shipmentId], references: [id])
+
+  batchId     String?
+  batch       Batch?          @relation(fields: [batchId], references: [id])
 
   description String
   photos      String[]
-  dimensions  Json?
+  dimensions  Json?     // { l, w, h }
   weight      Float?
+
+  expiryDate  DateTime?
+  receivedAt  DateTime?
+
+  penalties   StoragePenalty[]
 
   deletedAt   DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  @@index([userId, createdAt])
+  @@index([userId, status])
+  @@index([sku])
+}
+
+model Batch {
+  id          String          @id @default(cuid())
+  name        String          // e.g. "Import 2024-001"
+  items       WarehouseItem[]
+  createdAt   DateTime        @default(now())
+}
+
+model Container {
+  id          String          @id @default(cuid())
+  number      String          @unique
+  type        ContainerType   @default(LCL)
+  shipments   Shipment[]
+  createdAt   DateTime        @default(now())
+}
+
+model StoragePenalty {
+  id              String         @id @default(cuid())
+  warehouseItemId String
+  warehouseItem   WarehouseItem  @relation(fields: [warehouseItemId], references: [id])
+  amount          Decimal        @db.Decimal(10, 2)
+  daysExceeded    Int
+  createdAt       DateTime       @default(now())
 }
 
 model AuditLog {
@@ -219,7 +270,7 @@ model LoyaltyHistory {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id])
-  points    Int      // Amount of points added/removed
+  points    Int
   reason    String
   createdAt DateTime @default(now())
 

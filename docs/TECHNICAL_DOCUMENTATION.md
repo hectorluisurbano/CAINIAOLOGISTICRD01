@@ -7,79 +7,82 @@ Este documento proporciona una visión global y detallada de la plataforma CAINA
 ## 1. Arquitectura del Sistema
 La plataforma está construida bajo una arquitectura de **Monolito Modular**, lo que permite una separación clara de dominios de negocio mientras mantiene la simplicidad operativa.
 
-### Diagrama Conceptual de Capas:
-```text
-[ Capa de Presentación ]  <-- Next.js 15 (App Router + Server Actions)
-          |
-[ Capa de Aplicación  ]  <-- Servicios de Dominio (Shipping, Wallet, etc.)
-          |
-[ Capa de Dominio      ]  <-- Entidades, Agregados y Eventos de Dominio
-          |
-[ Capa de Infraestructura] <-- Prisma ORM, PostgreSQL, AWS S3, EventBus
-```
+### Capas del Sistema:
+- **Presentation**: Next.js 15 (App Router + Server Actions).
+- **Application**: Servicios de Dominio que coordinan casos de uso.
+- **Domain**: Entidades, Agregados y Eventos de Dominio (DDD).
+- **Infrastructure**: Prisma ORM, PostgreSQL, AWS S3, EventBus.
 
 ---
 
-## 2. Modelo Financiero: Billetera y Ledger
-Garantiza la consistencia atómica de los fondos mediante contabilidad de partida doble.
+## 2. Modelo de Datos y Base de Datos (PostgreSQL)
+El diseño de persistencia se enfoca en la integridad, auditoría y escalabilidad.
 
-### Flujo de Transacción Atómica:
-```text
-Usuario A -> [ JournalEntry ] -> { LedgerEntry(Débito, Cuenta A), LedgerEntry(Crédito, Cuenta B) }
-```
-- **Invariante**: La suma de los LedgerEntries de un JournalEntry es siempre 0.
-- **Hold (Escrow)**: Bloqueo temporal de fondos para servicios de importación offshore.
-
----
-
-## 3. Motor de Envíos y Ciclo de Vida
-Maneja el transporte internacional mediante una máquina de estados formal.
-
-### Ciclo de Vida del Envío:
-```text
-DRAFT -> PENDING -> RECEIVED_CHINA -> IN_TRANSIT -> CUSTOMS_HOLD -> CUSTOMS_CLEARED -> ARRIVED_RD -> DELIVERED
-```
-- **Peso Volumétrico**: Calculado automáticamente para optimizar costos de carga aérea vs marítima.
-- **Trazabilidad**: Cada cambio de estado genera un rastro inmutable en `TrackingHistory`.
-
----
-
-## 4. Flujo Offshore (Importación Asistida)
-Proceso de 6 pasos para compras directas en China (1688, Wiyu).
-
-1.  **Sourcing**: Links de proveedores.
-2.  **Quotation**: Validación de precios por agentes.
-3.  **Escrow**: Fondos bloqueados en la billetera.
-4.  **QC**: Inspección física en China con fotos.
-5.  **Consolidation**: Agrupación por lotes/contenedores.
-6.  **Shipping**: Despacho internacional.
-
----
-
-## 5. Seguridad y Control de Acceso (RBAC)
-- **Identidad**: JWT stateless con Refresh Tokens.
-- **Permisos**:
-    - `USER`: Operaciones personales.
-    - `AGENT`: Gestión de cartera de clientes y almacén.
-    - `ADMIN`: Control total y auditoría global.
-
----
-
-## 6. Auditoría e Inmutabilidad
-Cada acción crítica publica un evento al `EventBus`, el cual es capturado por el `AuditService` para su registro permanente.
-
-- **Severidades**: INFO, WARNING, ERROR, CRITICAL, SECURITY.
-- **Protección**: Triggers a nivel de DB previenen la edición/eliminación de logs.
-
----
-
-## 7. Modelo de Datos (Prisma)
-- **PostgreSQL**: Motor relacional robusto.
+- **Auditoría Global**: Cada tabla principal cuenta con rastro de cambios (`AuditLog`).
+- **Seguridad**: Soft deletes (`deletedAt`) y Control de Concurrencia (`version`).
+- **Escalabilidad**: Estrategia de particionamiento para logs y envíos históricos.
 - **JSONB**: Utilizado para dimensiones de paquetes, metadata de auditoría y fotos.
-- **Indexing**: Optimizado para búsquedas por `trackingId`, `sku` y `userId`.
 
 ---
 
-## 8. Escalabilidad e IA Ready
-- **Modularidad**: Preparado para extraer módulos a microservicios.
-- **IA**: Arquitectura lista para integrar modelos de predicción de tiempos y clasificación de carga basada en imágenes de QC.
+## 3. Modelo Financiero: Billetera y Ledger
+Garantiza la consistencia atómica de los fondos mediante un sistema de **Contabilidad de Partida Doble**.
+
+- **JournalEntry**: Registro de transacciones que afecta a múltiples cuentas.
+- **LedgerEntry**: Asientos individuales de crédito/débito.
+- **Invariante**: Suma(LedgerEntries) = 0 por transacción.
+- **Multi-moneda**: Soporte nativo para USD, DOP y CNY con tasas de cambio históricas.
+- **Escrow/Hold**: Bloqueo temporal de fondos para procesos offshore.
+
+---
+
+## 4. Motor de Envíos y Ciclo de Vida
+Maneja el transporte internacional mediante una **Máquina de Estados Formal**.
+
+- **Estados Clave**: DRAFT, PENDING, RECEIVED_CHINA, IN_TRANSIT, CUSTOMS, ARRIVED_RD, DELIVERED.
+- **Validaciones**: Las transiciones son validadas por `ShippingService`.
+- **Peso Volumétrico**: Calculado dinámicamente según el factor de servicio (Aéreo/Marítimo).
+- **Trazabilidad**: Historial completo en `TrackingHistory` sincronizable con APIs externas.
+
+---
+
+## 5. Módulo de Warehouse y Consolidación
+Gestión de inventario físico y preparación de carga.
+
+- **SKU Automático**: Generación única al momento de la recepción.
+- **Consolidación**: Capacidad para agrupar múltiples `WarehouseItems` en un solo `Shipment`.
+- **Carga LCL/FCL**: Soporte para carga consolidada y contenedores completos.
+- **Almacenamiento**: Control de días de gracia y cálculo automático de penalizaciones por estadía extendida.
+
+---
+
+## 6. Flujo Offshore (Importación Asistida)
+Proceso guiado de 6 pasos para mitigar riesgos en compras directas en China.
+
+1.  **Sourcing**: Identificación de productos y links (1688, Wiyu).
+2.  **Quotation**: Validación de costos y agentes.
+3.  **Payment/Escrow**: Fondos bloqueados en la billetera.
+4.  **QC (Quality Control)**: Inspección física con reportes fotográficos.
+5.  **Consolidation**: Agrupación logística.
+6.  **Shipping**: Despacho internacional y aduanas.
+
+---
+
+## 7. Modelo de Seguridad Enterprise
+- **Autenticación**: NextAuth.js con JWT (Access + Refresh Tokens) y bcrypt.
+- **Autorización**: RBAC jerárquico (USER -> AGENT -> ADMIN).
+- **Protección**: Validación estricta con Zod y mitigación de ataques CSRF/XSS.
+- **Auditoría Inmutable**: Logs inalterables protegidos a nivel de base de datos.
+
+---
+
+## 8. Eventos de Dominio y Desacoplamiento
+El sistema se comunica internamente mediante un `EventBus` centralizado.
+- **Eventos Críticos**: `ShipmentCreated`, `BalanceUpdated`, `QCReportGenerated`, `UserLevelUp`.
+- **Integración**: Los eventos disparan acciones secundarias como notificaciones y puntos de gamificación.
+
+---
+
+## 9. Escalabilidad e IA
+- **Modularidad**: Diseñado para facilitar la transición a Microservicios.
+- **IA Ready**: Infraestructura lista para integrar modelos de predicción de tiempos, optimización de rutas y reconocimiento de imágenes de carga.

@@ -52,7 +52,14 @@ Cada cambio de estado genera un rastro de auditoría inmutable:
 - **External API Sync**: Sincronización con transportistas (DHL, UPS, etc.) que inyecta eventos externos al historial local.
 - **Pruebas de Entrega**: Almacenamiento de firmas digitales y fotos de entrega en S3 vinculadas al evento `DELIVER`.
 
-## 5. Manejo de Excepciones
+## 5. Implementación del Servicio (ShippingService)
+La lógica de negocio se centraliza en `ShippingService`, que se encarga de:
+- Validar transiciones mediante la máquina de estados.
+- Persistir cambios en la base de datos de forma atómica.
+- Registrar automáticamente el historial en `TrackingHistory`.
+- Publicar eventos en el `EventBus` para desacoplar procesos secundarios (ej. notificaciones, puntos).
+
+## 6. Manejo de Excepciones
 - **Deadlock de Estado**: Si un envío queda en un estado inconsistente, solo un `ADMIN` puede forzar una transición correctiva previa justificación.
 - **Fallo de API**: Los fallos en la comunicación con APIs externas se manejan mediante reintentos exponenciales (Exponential Backoff).
 - **Discrepancia de Peso**: Si el peso reportado por el transportista difiere significativamente del registrado en almacén, el envío se mueve a `CUSTOMS_HOLD` automáticamente para revisión.

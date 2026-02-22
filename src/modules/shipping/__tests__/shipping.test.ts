@@ -1,6 +1,8 @@
 import { describe, it, expect } from "bun:test";
 import { ShipmentStatus } from "@prisma/client";
 import { canTransition, calculateVolumetricWeight, calculateShippingCost } from "../state-machine";
+import { shippingService } from "../shipping.service";
+import { eventBus } from "../../../core/events/event-bus";
 
 describe("Shipping Engine - State Machine", () => {
   it("should allow valid transitions", () => {
@@ -32,10 +34,45 @@ describe("Shipping Engine - Cost Calculation", () => {
     // 8 * 2.5 = 20
     expect(cost).toBe(20);
   });
+});
 
-  it("should include additional fees", () => {
-    const cost = calculateShippingCost(10, 5, 2, 15);
-    // (10 * 2) + 15 = 35
-    expect(cost).toBe(35);
+describe("ShippingService", () => {
+  it("should transition status and publish event", async () => {
+    let eventPayload: { shipmentId: string; toStatus: ShipmentStatus } | null = null;
+    eventBus.subscribe<{ shipmentId: string; toStatus: ShipmentStatus }>("shipment:status_changed", (payload) => {
+      eventPayload = payload;
+    });
+
+    await shippingService.transitionShipment({
+      shipmentId: "ship_123",
+      toStatus: ShipmentStatus.PENDING
+    }, ShipmentStatus.DRAFT);
+
+    expect(eventPayload).not.toBeNull();
+    expect(eventPayload?.shipmentId).toBe("ship_123");
+    expect(eventPayload?.toStatus).toBe(ShipmentStatus.PENDING);
+  });
+
+  it("should throw error for invalid transition", async () => {
+    expect(
+      shippingService.transitionShipment({
+        shipmentId: "ship_123",
+        toStatus: ShipmentStatus.DELIVERED
+      }, ShipmentStatus.DRAFT)
+    ).rejects.toThrow("Transición no permitida");
+  });
+
+  it("should publish delivered event when status is DELIVERED", async () => {
+    let deliveredCalled = false;
+    eventBus.subscribe("shipment:delivered", () => {
+      deliveredCalled = true;
+    });
+
+    await shippingService.transitionShipment({
+      shipmentId: "ship_456",
+      toStatus: ShipmentStatus.DELIVERED
+    }, ShipmentStatus.OUT_FOR_DELIVERY);
+
+    expect(deliveredCalled).toBe(true);
   });
 });

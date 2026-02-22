@@ -30,12 +30,20 @@ enum TransactionType {
   REFUND
   TRANSFER
   ADJUSTMENT
+  HOLD
+  RELEASE
 }
 
 enum Currency {
   USD
   DOP
   CNY
+}
+
+enum HoldStatus {
+  ACTIVE
+  EXECUTED
+  RELEASED
 }
 
 model User {
@@ -45,10 +53,9 @@ model User {
   password        String?
   role            Role           @default(USER)
   points          Int            @default(0)
+  loyaltyHistory  LoyaltyHistory[]
 
-  // Financial consistency
   accounts        Account[]
-
   shipments       Shipment[]
   warehouseItems  WarehouseItem[]
   auditLogs       AuditLog[]
@@ -66,9 +73,15 @@ model Account {
   userId        String
   user          User           @relation(fields: [userId], references: [id])
   currency      Currency       @default(USD)
+
+  // Ledger-based balance (Total funds)
   balance       Decimal        @default(0.00) @db.Decimal(12, 2)
 
+  // Available funds (Balance - Active Holds)
+  availableBalance Decimal     @default(0.00) @db.Decimal(12, 2)
+
   ledgerEntries LedgerEntry[]
+  holds         Hold[]
 
   version       Int            @default(1)
   createdAt     DateTime       @default(now())
@@ -77,24 +90,48 @@ model Account {
   @@unique([userId, currency])
 }
 
+model JournalEntry {
+  id              String         @id @default(cuid())
+  description     String
+  idempotencyKey  String?        @unique
+  referenceId     String?        // External reference (Stripe ID, etc.)
+
+  ledgerEntries   LedgerEntry[]
+
+  createdAt       DateTime       @default(now())
+}
+
 model LedgerEntry {
   id            String          @id @default(cuid())
   accountId     String
   account       Account         @relation(fields: [accountId], references: [id])
-  amount        Decimal         @db.Decimal(12, 2) // Positive for credit, negative for debit
+  journalEntryId String
+  journalEntry  JournalEntry    @relation(fields: [journalEntryId], references: [id])
+
+  amount        Decimal         @db.Decimal(12, 2)
   balanceAfter  Decimal         @db.Decimal(12, 2)
+
   type          TransactionType
-  description   String
-  referenceId   String?         // ID of the related object (Shipment, etc.)
-
-  // Multi-currency metadata
-  originalAmount Decimal?       @db.Decimal(12, 2)
-  originalCurrency Currency?
-  exchangeRate   Decimal?       @db.Decimal(12, 6)
-
   createdAt     DateTime        @default(now())
 
   @@index([accountId, createdAt])
+}
+
+model Hold {
+  id            String         @id @default(cuid())
+  accountId     String
+  account       Account        @relation(fields: [accountId], references: [id])
+  amount        Decimal        @db.Decimal(12, 2)
+  reason        String
+  status        HoldStatus     @default(ACTIVE)
+
+  referenceId   String?        // ID of the related object (OffshoreOrder, etc.)
+  expiresAt     DateTime?
+
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([accountId, status])
 }
 
 model Shipment {
@@ -107,7 +144,7 @@ model Shipment {
   weightReal      Float?
   weightVol       Float?
   cost            Decimal?       @db.Decimal(10, 2)
-  serviceType     String?        // Standard vs Express
+  serviceType     String?
 
   items           WarehouseItem[]
 
@@ -128,8 +165,8 @@ model WarehouseItem {
   shipment    Shipment? @relation(fields: [shipmentId], references: [id])
 
   description String
-  photos      String[]  // S3 URLs
-  dimensions  Json?     // { l, w, h }
+  photos      String[]
+  dimensions  Json?
   weight      Float?
 
   deletedAt   DateTime?
@@ -144,13 +181,24 @@ model AuditLog {
   userId    String?
   user      User?    @relation(fields: [userId], references: [id])
   action    String
-  entity    String?  // Name of the table/entity
-  entityId  String?  // ID of the affected record
-  oldValue  Json?    // Snapshot before change
-  newValue  Json?    // Snapshot after change
-  metadata  Json?    // IP, User-Agent, etc.
+  entity    String?
+  entityId  String?
+  oldValue  Json?
+  newValue  Json?
+  metadata  Json?
   timestamp DateTime @default(now())
 
   @@index([entity, entityId])
   @@index([userId, timestamp])
+}
+
+model LoyaltyHistory {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  points    Int      // Amount of points added/removed
+  reason    String
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
 }

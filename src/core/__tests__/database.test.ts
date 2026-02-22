@@ -1,5 +1,4 @@
 import { describe, it, expect } from "bun:test";
-import { PrismaClient } from "@prisma/client";
 
 describe("Database Schema Logic", () => {
   it("should have soft delete field on User model", () => {

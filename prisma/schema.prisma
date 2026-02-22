@@ -16,10 +16,14 @@ enum Role {
 }
 
 enum ShipmentStatus {
+  DRAFT
   PENDING
   RECEIVED_CHINA
   IN_TRANSIT
+  CUSTOMS_HOLD
+  CUSTOMS_CLEARED
   ARRIVED_RD
+  OUT_FOR_DELIVERY
   DELIVERED
   CANCELLED
 }
@@ -137,7 +141,7 @@ model Hold {
 model Shipment {
   id              String         @id @default(cuid())
   trackingId      String         @unique
-  status          ShipmentStatus @default(PENDING)
+  status          ShipmentStatus @default(DRAFT)
   userId          String
   user            User           @relation(fields: [userId], references: [id])
 
@@ -146,7 +150,11 @@ model Shipment {
   cost            Decimal?       @db.Decimal(10, 2)
   serviceType     String?
 
+  customsStatus   String?
+  customsNotes    String?
+
   items           WarehouseItem[]
+  trackingHistory TrackingHistory[]
 
   version         Int            @default(1)
   deletedAt       DateTime?
@@ -155,6 +163,21 @@ model Shipment {
 
   @@index([userId, status])
   @@index([trackingId, deletedAt])
+}
+
+model TrackingHistory {
+  id          String         @id @default(cuid())
+  shipmentId  String
+  shipment    Shipment       @relation(fields: [shipmentId], references: [id])
+  fromStatus  ShipmentStatus?
+  toStatus    ShipmentStatus
+  location    String?
+  description String?
+  actorId     String?
+  metadata    Json?
+  createdAt   DateTime       @default(now())
+
+  @@index([shipmentId])
 }
 
 model WarehouseItem {

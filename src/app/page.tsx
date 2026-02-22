@@ -1,3 +1,5 @@
+import { Button } from "@/components/ui/button";
+
 export default function Home() {
   return (
     <div className="space-y-8">
@@ -32,15 +34,15 @@ export default function Home() {
       <section className="bg-slate-50 p-8 rounded-2xl border border-slate-100">
         <h3 className="text-2xl font-bold mb-4">Acciones Rápidas</h3>
         <div className="flex flex-wrap gap-4">
-          <button className="bg-cinnabar text-white px-6 py-3 rounded-lg font-semibold hover:opacity-90 transition-opacity">
+          <Button className="h-12 px-8 text-lg bg-cinnabar hover:bg-cinnabar/90">
             Nuevo Envío
-          </button>
-          <button className="bg-yale-blue text-white px-6 py-3 rounded-lg font-semibold hover:opacity-90 transition-opacity">
+          </Button>
+          <Button className="h-12 px-8 text-lg bg-yale-blue hover:bg-yale-blue/90">
             Solicitar Offshore
-          </button>
-          <button className="bg-mikado-yellow text-yale-blue px-6 py-3 rounded-lg font-semibold hover:opacity-90 transition-opacity">
+          </Button>
+          <Button variant="outline" className="h-12 px-8 text-lg border-mikado-yellow text-yale-blue hover:bg-mikado-yellow/10">
             Recargar Billetera
-          </button>
+          </Button>
         </div>
       </section>
     </div>

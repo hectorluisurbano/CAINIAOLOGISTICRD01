@@ -20,29 +20,32 @@ El sistema sigue un patrón de diseño por capas para garantizar la mantenibilid
 
 ## 3. Separación de Responsabilidades por Módulo
 
-| Módulo | Responsabilidad |
-| :--- | :--- |
-| **Shipping** | Gestión de guías, cálculo de costos (peso/volumen), tracking y estados. |
-| **Warehouse** | Control de inventario en China/RD, fotos de artículos y dimensiones. |
-| **Offshore** | Flujo de importación (6 pasos) y comunicación con proveedores chinos. |
-| **Wallet** | Ledger financiero, recargas, pagos de servicios y auditoría de fondos. |
-| **Gamification** | Sistema de puntos y niveles (Novato -> CEO). |
-| **Audit** | Registro centralizado de todas las actividades (40+ tipos de logs). |
-| **Identity** | Gestión de usuarios, autenticación y RBAC. |
+| Módulo | Responsabilidad | Entidades Principales |
+| :--- | :--- | :--- |
+| **Shipping** | Gestión de guías, cotizaciones y tracking. | `Shipment`, `Package`, `TrackingUpdate` |
+| **Warehouse** | Inventario físico, dimensiones y fotos QC. | `WarehouseItem` |
+| **Offshore** | Flujo de importación asistida desde China. | `OffshoreOrder`, `SupplierLink` |
+| **Wallet** | Ledger financiero y balance de usuarios. | `Account`, `Transaction` |
+| **Gamification** | Sistema de puntos, niveles y beneficios. | `LoyaltyProfile` |
+| **Audit** | Registro inmutable de observabilidad. | `AuditStream`, `AuditLog` |
+| **Identity** | Gestión de identidades y permisos RBAC. | `User` |
 
 ## 4. Eventos de Dominio Clave
-El sistema utiliza eventos para desacoplar módulos:
-- `ShipmentCreated`: Notifica al almacén y al sistema de auditoría.
-- `PackageArrivedAtWarehouse`: Activa la notificación al usuario y el sistema de puntos.
-- `QCReportGenerated`: Envía una alerta al cliente para aprobación.
-- `TransactionCompleted`: Actualiza el saldo de la billetera y genera un registro contable.
-- `UserLevelUp`: Se dispara cuando un usuario alcanza un umbral de puntos.
+El sistema utiliza eventos para desacoplar módulos y orquestar flujos:
+- `ShipmentCreated`: Inicia el proceso de envío y notifica auditoría.
+- `ShipmentStatusChanged`: Notifica al usuario y actualiza el tracking.
+- `QuotationCalculated`: Registra el cálculo basado en peso real vs volumétrico.
+- `ItemReceivedAtWarehouse`: Registra la llegada de un paquete al almacén.
+- `QCReportGenerated`: Envía una alerta al cliente para aprobación del reporte QC.
+- `BalanceUpdated`: Notifica cambios en el saldo de la billetera.
+- `PointsEarned`: Se dispara al completar acciones que otorgan puntos.
+- `UserLevelPromoted`: Se dispara cuando un usuario alcanza un umbral de puntos (ej. CEO).
 
 ## 5. Componentes de Infraestructura
 - **Base de Datos**: PostgreSQL para datos estructurados. Uso de `JSONB` para almacenar dimensiones de paquetes y metadatos variables.
 - **Almacenamiento**: AWS S3 para fotos de inspección de calidad (QC) y reportes PDF.
 - **Autenticación**: NextAuth.js con tokens JWT y control de acceso basado en roles (RBAC).
-- **Procesamiento en Segundo Plano**: Preparado para colas de tareas (ej. BullMQ) para generación masiva de PDFs o sincronización con APIs de transporte.
+- **Procesamiento en Segundo Plano**: Preparado para colas de tareas (ej. BullMQ) para generación masiva de PDFs o sincronización con APIs de transporte. Para alta escala, el `EventBus` in-memory puede ser sustituido por un broker de mensajería como Redis o AWS SQS.
 
 ## 6. Escalabilidad Futura
 - **Horizontal**: El frontend y backend (Next.js) pueden escalarse horizontalmente detrás de un balanceador de carga.

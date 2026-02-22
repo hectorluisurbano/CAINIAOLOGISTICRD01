@@ -22,7 +22,7 @@ class EventBus extends EventEmitter {
   /**
    * Publica un evento de dominio.
    */
-  public publish<T = unknown>(event: string, payload: T): void {
+  public publish<T = unknown>(event: string, payload: T, context?: { userId?: string, severity?: string, traceId?: string }): void {
     console.log(`[EventBus] Publishing event: ${event}`, payload);
     this.emit(event, payload);
 
@@ -31,6 +31,9 @@ class EventBus extends EventEmitter {
       this.emit('audit:log', {
         event,
         payload,
+        userId: context?.userId,
+        severity: context?.severity || 'INFO',
+        traceId: context?.traceId,
         timestamp: new Date(),
       });
     }

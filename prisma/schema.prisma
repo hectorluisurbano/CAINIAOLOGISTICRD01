@@ -64,6 +64,17 @@ enum ContainerType {
   FCL
 }
 
+enum OffshoreStatus {
+  DRAFT
+  AWAITING_QUOTATION
+  PENDING_PAYMENT
+  PURCHASE_IN_PROGRESS
+  QC_PHASE
+  READY_FOR_CONSOLIDATION
+  COMPLETED
+  CANCELLED
+}
+
 model User {
   id              String         @id @default(cuid())
   name            String?
@@ -76,6 +87,7 @@ model User {
   accounts        Account[]
   shipments       Shipment[]
   warehouseItems  WarehouseItem[]
+  offshoreOrders  OffshoreOrder[]
   auditLogs       AuditLog[]
 
   version         Int            @default(1)
@@ -208,9 +220,12 @@ model WarehouseItem {
   batchId     String?
   batch       Batch?          @relation(fields: [batchId], references: [id])
 
+  offshoreOrderId String?
+  offshoreOrder   OffshoreOrder? @relation(fields: [offshoreOrderId], references: [id])
+
   description String
   photos      String[]
-  dimensions  Json?     // { l, w, h }
+  dimensions  Json?
   weight      Float?
 
   expiryDate  DateTime?
@@ -223,12 +238,11 @@ model WarehouseItem {
   updatedAt   DateTime  @updatedAt
 
   @@index([userId, status])
-  @@index([sku])
 }
 
 model Batch {
   id          String          @id @default(cuid())
-  name        String          // e.g. "Import 2024-001"
+  name        String
   items       WarehouseItem[]
   createdAt   DateTime        @default(now())
 }
@@ -247,6 +261,40 @@ model StoragePenalty {
   warehouseItem   WarehouseItem  @relation(fields: [warehouseItemId], references: [id])
   amount          Decimal        @db.Decimal(10, 2)
   daysExceeded    Int
+  createdAt       DateTime       @default(now())
+}
+
+model OffshoreOrder {
+  id            String         @id @default(cuid())
+  userId        String
+  user          User           @relation(fields: [userId], references: [id])
+  status        OffshoreStatus @default(DRAFT)
+  currentStep   Int            @default(1)
+
+  productInfo   String
+  estimatedQty  Int?
+
+  supplierLinks SupplierLink[]
+  warehouseItems WarehouseItem[]
+
+  totalQuote    Decimal?       @db.Decimal(12, 2)
+  holdId        String?        // Link to Wallet Hold
+
+  version       Int            @default(1)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([userId, status])
+}
+
+model SupplierLink {
+  id              String         @id @default(cuid())
+  offshoreOrderId String
+  offshoreOrder   OffshoreOrder  @relation(fields: [offshoreOrderId], references: [id])
+  url             String
+  price           Decimal?       @db.Decimal(12, 2)
+  isValidated     Boolean        @default(false)
+  notes           String?
   createdAt       DateTime       @default(now())
 }
 
